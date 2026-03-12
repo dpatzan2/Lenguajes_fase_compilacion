@@ -147,3 +147,56 @@ def split_rule_alternatives(rules_block):
             i += 1
         alternatives.append((regexp, action))
     return alternatives
+
+class RegexParser:
+    def __init__(self, s, lets=None):
+        self.s = s
+        self.i = 0
+        self.n = len(s)
+        self.lets = lets or {}
+
+    def peek(self):
+        return self.s[self.i] if self.i < self.n else None
+
+    def get(self):
+        c = self.peek()
+        if c is not None:
+            self.i += 1
+        return c
+
+    def parse(self):
+        if self.lets:
+            s = self.s
+            for k, v in self.lets.items():
+                s = re.sub(r'\{' + re.escape(k) + r'\}', '(' + v + ')', s)
+            for k, v in self.lets.items():
+                s = re.sub(r'(?<!\w)'+re.escape(k)+r'(?!\w)', '(' + v + ')', s)
+            self.s = s
+            self.n = len(self.s)
+        expr = self.parse_alt()
+        return expr
+
+    def parse_alt(self):
+        parts = [self.parse_concat()]
+        while self.peek() == '|':
+            self.get()
+            parts.append(self.parse_concat())
+        if len(parts) == 1:
+            return parts[0]
+        else:
+            return ('alt', parts)
+
+    def parse_concat(self):
+        nodes = []
+        while True:
+            if self.peek() is None or self.peek() in ')|':
+                break
+            node = self.parse_repeat()
+            if node is None:
+                break
+            nodes.append(node)
+        if not nodes:
+            return ('epsilon',)
+        if len(nodes) == 1:
+            return nodes[0]
+        return ('concat', nodes)
