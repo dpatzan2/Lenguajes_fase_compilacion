@@ -83,3 +83,67 @@ def remove_hash_comments(s):
         out.append(c)
         i += 1
     return ''.join(out)
+
+def split_rule_alternatives(rules_block):
+    alternatives = []
+    i = 0
+    n = len(rules_block)
+    while i < n:
+        while i < n and rules_block[i].isspace():
+            i += 1
+        if i < n and rules_block[i] == '|':
+            i += 1
+            while i < n and rules_block[i].isspace():
+                i += 1
+        start = i
+        in_sq = False
+        in_dq = False
+        in_sqquote = False
+        in_squote = False
+        escaped = False
+        while i < n:
+            c = rules_block[i]
+            if escaped:
+                escaped = False
+                i += 1
+                continue
+            if c == "\\":
+                escaped = True
+                i += 1
+                continue
+            if c == '"' and not in_squote and not in_sq:
+                in_dq = not in_dq
+                i += 1
+                continue
+            if c == "'" and not in_dq and not in_sq:
+                in_squote = not in_squote
+                i += 1
+                continue
+            if c == '[' and not in_dq and not in_squote:
+                in_sq = True
+                i += 1
+                continue
+            if c == ']' and in_sq:
+                in_sq = False
+                i += 1
+                continue
+            if c == '{' and not in_sq and not in_dq and not in_squote:
+                break
+            i += 1
+        regexp = rules_block[start:i].strip()
+        if i >= n or rules_block[i] != '{':
+            break
+        brace_start = i
+        depth = 0
+        while i < n:
+            if rules_block[i] == '{':
+                depth += 1
+            elif rules_block[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    action = rules_block[brace_start+1:i].strip()
+                    i += 1
+                    break
+            i += 1
+        alternatives.append((regexp, action))
+    return alternatives
