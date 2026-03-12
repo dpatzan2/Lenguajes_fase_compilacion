@@ -44,3 +44,42 @@ def split_yal(text):
     block_start = m.start(2)
     rules_block = text[block_start:].strip()
     return header, lets, entrypoint, rules_block, trailer
+
+
+def remove_hash_comments(s):
+    out = []
+    in_dquote = False
+    in_squote = False
+    in_class = False
+    brace_depth = 0
+    i = 0
+    n = len(s)
+    while i < n:
+        c = s[i]
+        # toggle states
+        if c == '"' and not in_squote and not in_class and brace_depth == 0:
+            in_dquote = not in_dquote
+            out.append(c); i += 1; continue
+        if c == "'" and not in_dquote and not in_class and brace_depth == 0:
+            in_squote = not in_squote
+            out.append(c); i += 1; continue
+        if c == '[' and not in_dquote and not in_squote and brace_depth == 0:
+            in_class = True
+            out.append(c); i += 1; continue
+        if c == ']' and in_class:
+            in_class = False
+            out.append(c); i += 1; continue
+        if c == '{' and not in_dquote and not in_squote:
+            brace_depth += 1
+            out.append(c); i += 1; continue
+        if c == '}' and brace_depth > 0 and not in_dquote and not in_squote:
+            brace_depth -= 1
+            out.append(c); i += 1; continue
+        if c == '#' and not in_dquote and not in_squote and not in_class and brace_depth == 0:
+            i += 1
+            while i < n and s[i] != '\n':
+                i += 1
+            continue
+        out.append(c)
+        i += 1
+    return ''.join(out)
