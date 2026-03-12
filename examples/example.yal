@@ -1,0 +1,12 @@
+// Ejemplo sencillo de especificación YALEX para el proyecto.
+
+let DIGIT = [0-9]
+let LETTER = [a-zA-Z]
+
+rule
+    {DIGIT}+        { return "INT"; }
+  | {LETTER}({LETTER}|{DIGIT})*  { return "ID"; }
+  | " "             { /* ignorar espacios */ }
+  | "\n"            { return "NEWLINE"; }
+  | .               { return "UNKNOWN"; }
+

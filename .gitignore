@@ -1,0 +1,21 @@
+# Archivos de Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Archivos de editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos generados por el lexer/parser
+lexer.py
+parser.py
+*.log
+
