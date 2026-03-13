@@ -414,3 +414,89 @@ def nfa_all_symbol_keys(nfa_start):
         for e in st.eps:
             stack.append(e)
     return keys
+
+def match_symbol_key(key, sym):
+    if key is None:
+        return True
+    if isinstance(key, tuple) and key[0] == 'class':
+        neg = key[1]
+        items = set(key[2])
+        if neg:
+            return sym not in items
+        else:
+            return sym in items
+    return key == sym
+
+def determinize(nfa_start, accept_states_map):
+    def build_alphabet(start):
+        visited = set()
+        stack = [start]
+        chars = set()
+        has_wild = False
+        has_neg_class = False
+        while stack:
+            st = stack.pop()
+            if st in visited:
+                continue
+            visited.add(st)
+            for k, vlist in st.trans.items():
+                if k is None:
+                    has_wild = True
+                elif isinstance(k, tuple) and k[0] == 'class':
+                    neg = k[1]
+                    items = set(k[2])
+                    chars.update(items)
+                    if neg:
+                        has_neg_class = True
+                else:
+                    chars.add(k)
+                for v in vlist:
+                    stack.append(v)
+            for e in st.eps:
+                stack.append(e)
+        if has_wild or has_neg_class:
+            for code in range(32, 127): 
+                chars.add(chr(code))
+            chars.add('\n'); chars.add('\t')
+        return sorted(chars)
+
+    start_closure = frozenset(epsilon_closure({nfa_start}))
+    dstate_map = {start_closure: 0}
+    dstates = [start_closure]
+    trans = {}
+    accepting = {}
+    q = deque([start_closure])
+    alphabet = build_alphabet(nfa_start)
+
+    while q:
+        S = q.popleft()
+        sid = dstate_map[S]
+        trans[sid] = {}
+        acc_rules = set()
+        for n in S:
+            if n in accept_states_map:
+                acc_rules.add(accept_states_map[n])
+        if acc_rules:
+            accepting[sid] = sorted(acc_rules)
+        for ch in alphabet:
+            T = set()
+            for n in S:
+                for k, vlist in n.trans.items():
+                    if match_symbol_key(k, ch):
+                        for t in vlist:
+                            T.add(t)
+            if not T:
+                continue
+            T_cl = frozenset(epsilon_closure(T))
+            if T_cl not in dstate_map:
+                dstate_map[T_cl] = len(dstates)
+                dstates.append(T_cl)
+                q.append(T_cl)
+            trans[sid][ch] = dstate_map[T_cl]
+    return {
+        'trans': trans,
+        'accepting': accepting,
+        'start': 0,
+        'symbols': alphabet,
+        'num_states': len(dstates)
+    }
