@@ -1,10 +1,8 @@
 import re
-
+from collections import defaultdict
 
 def read_yal(path: str) -> str:
-    """Lee y devuelve el contenido completo de un archivo .yal."""
     return open(path, "r", encoding="utf-8").read()
-
 
 def split_yal(text):
     header = ""
@@ -311,3 +309,80 @@ class RegexParser:
             items.append(c)
             prev = c
         return ('class', (neg, set(items)))
+    
+class NFAState:
+    _id_counter = 0
+    def __init__(self):
+        self.id = NFAState._id_counter
+        NFAState._id_counter += 1
+        self.eps = []
+        self.trans = defaultdict(list)
+
+class NFA:
+    def __init__(self, start, accept):
+        self.start = start
+        self.accept = accept
+
+def ast_to_nfa(ast):
+    t = ast[0]
+    if t == 'char':
+        s = NFAState(); a = NFAState()
+        sym = ast[1]
+        s.trans[sym].append(a)
+        return NFA(s,a)
+    if t == 'str':
+        seq = ast[1]
+        states = []
+        for ch in seq:
+            s = NFAState(); a = NFAState()
+            s.trans[ch].append(a)
+            states.append((s,a))
+        for i in range(len(states)-1):
+            states[i][1].eps.append(states[i+1][0])
+        return NFA(states[0][0], states[-1][1])
+    if t == 'dot':
+        s = NFAState(); a = NFAState()
+        s.trans[None].append(a)
+        return NFA(s,a)
+    if t == 'class':
+        neg, items = ast[1]
+        s = NFAState(); a = NFAState()
+        s.trans[('class', neg, frozenset(items))].append(a)
+        return NFA(s,a)
+    if t == 'epsilon':
+        s = NFAState(); a = NFAState()
+        s.eps.append(a)
+        return NFA(s,a)
+    if t == 'star':
+        inner = ast_to_nfa(ast[1])
+        s = NFAState(); a = NFAState()
+        s.eps.extend([inner.start, a])
+        inner.accept.eps.extend([inner.start, a])
+        return NFA(s,a)
+    if t == 'plus':
+        inner = ast_to_nfa(ast[1])
+        s = NFAState(); a = NFAState()
+        s.eps.append(inner.start)
+        inner.accept.eps.extend([inner.start, a])
+        return NFA(s,a)
+    if t == 'opt':
+        inner = ast_to_nfa(ast[1])
+        s = NFAState(); a = NFAState()
+        s.eps.extend([inner.start, a])
+        inner.accept.eps.append(a)
+        return NFA(s,a)
+    if t == 'concat':
+        nodes = ast[1]
+        nfa_list = [ast_to_nfa(n) for n in nodes]
+        for i in range(len(nfa_list)-1):
+            nfa_list[i].accept.eps.append(nfa_list[i+1].start)
+        return NFA(nfa_list[0].start, nfa_list[-1].accept)
+    if t == 'alt':
+        parts = ast[1]
+        s = NFAState(); a = NFAState()
+        for p in parts:
+            np = ast_to_nfa(p)
+            s.eps.append(np.start)
+            np.accept.eps.append(a)
+        return NFA(s,a)
+    s = NFAState(); a = NFAState(); s.eps.append(a); return NFA(s,a)
