@@ -1,4 +1,4 @@
-import re
+import re, sys, argparse
 from collections import defaultdict, deque
 
 def read_yal(path: str) -> str:
@@ -584,3 +584,46 @@ def generate_python_lexer(header_code, dfa, accept_actions, out_path):
         f.write('    txt = open(sys.argv[1], encoding=\"utf-8\").read()\n')
         f.write('    tokenize_text(txt)\n')
     print(f'Generado: {out_path}')
+
+def build_combined_nfa(alternatives, lets):
+    NFAState._id_counter = 0
+    start = NFAState()
+    accept_map = {}
+    for idx, (regexp, action) in enumerate(alternatives):
+        parser = RegexParser(regexp, lets)
+        ast = parser.parse()
+        nfa = ast_to_nfa(ast)
+        start.eps.append(nfa.start)
+        accept_map[nfa.accept] = idx
+    return start, accept_map
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('file', help='Archivo .yal')
+    ap.add_argument('-o', '--out', default='thelexer.py', help='Salida (archivo .py)')
+    args = ap.parse_args()
+    txt = read_yal(args.file)
+    header, lets, entrypoint, rules_block, trailer = split_yal(txt)
+
+    if lets:
+        for k, v in lets.items():
+            rules_block = re.sub(r'\{' + re.escape(k) + r'\}', '(' + v + ')', rules_block)
+        for k, v in lets.items():
+            rules_block = re.sub(r'(?<!\w)' + re.escape(k) + r'(?!\w)', '(' + v + ')', rules_block)
+
+    rules_block = remove_hash_comments(rules_block)
+
+    print("DEBUG: reglas tras expansion de lets (primeros 400 chars):")
+    print(rules_block[:400].replace('\n', '\\n'))
+
+    alternatives = split_rule_alternatives(rules_block)
+    if not alternatives:
+        print('No se encontraron alternativas en rule.')
+        sys.exit(1)
+    nfa_start, accept_map = build_combined_nfa(alternatives, lets)
+    dfa = determinize(nfa_start, accept_map)
+    accept_actions = [act for (_, act) in alternatives]
+    generate_python_lexer(header, dfa, accept_actions, args.out)
+
+if __name__ == '__main__':
+    main()
