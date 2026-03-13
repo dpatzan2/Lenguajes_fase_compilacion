@@ -1,5 +1,5 @@
 import re
-from collections import defaultdict
+from collections import defaultdict, deque
 
 def read_yal(path: str) -> str:
     return open(path, "r", encoding="utf-8").read()
