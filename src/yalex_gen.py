@@ -200,3 +200,114 @@ class RegexParser:
         if len(nodes) == 1:
             return nodes[0]
         return ('concat', nodes)
+    
+    def parse_repeat(self):
+        node = self.parse_atom()
+        if node is None:
+            return None
+        while True:
+            p = self.peek()
+            if p == '*':
+                self.get()
+                node = ('star', node)
+            elif p == '+':
+                self.get()
+                node = ('plus', node)
+            elif p == '?':
+                self.get()
+                node = ('opt', node)
+            else:
+                break
+        return node
+
+    def parse_atom(self):
+        c = self.peek()
+        if c is None:
+            return None
+        if c == '(':
+            self.get()
+            sub = self.parse_alt()
+            if self.peek() == ')':
+                self.get()
+            return sub
+        if c == '"':
+            return self.parse_string()
+        if c == "'":
+            return self.parse_string(quote="'")
+        if c == '[':
+            return self.parse_class()
+        if c == '.':
+            self.get()
+            return ('dot',)
+        if c == '\\':
+            self.get()
+            nxt = self.get()
+            if nxt is None:
+                return ('char', '')
+            return ('char', self.unescape(nxt))
+        if c in '*+?)|':
+            return None
+        self.get()
+        return ('char', c)
+
+    def unescape(self, c):
+        escapes = {'n':'\n','t':'\t','r':'\r','\\':'\\','"':'"',"'" : "'"}
+        return escapes.get(c, c)
+
+    def parse_string(self, quote='"'):
+        self.get()
+        chars = []
+        while True:
+            c = self.get()
+            if c is None:
+                break
+            if c == '\\':
+                nxt = self.get()
+                if nxt is None:
+                    break
+                chars.append(self.unescape(nxt))
+                continue
+            if c == quote:
+                break
+            chars.append(c)
+        content = ''.join(chars)
+        if len(content) == 0:
+            return ('epsilon',)
+        if len(content) == 1:
+            return ('char', content)
+        return ('str', content)
+
+    def parse_class(self):
+        self.get()
+        neg = False
+        if self.peek() == '^':
+            neg = True
+            self.get()
+        items = []
+        prev = None
+        while True:
+            c = self.get()
+            if c is None:
+                break
+            if c == ']':
+                break
+            if c == '\\':
+                c = self.get()
+                if c is None:
+                    break
+                items.append(self.unescape(c))
+                prev = items[-1]
+                continue
+            if c == '-' and prev is not None and self.peek() != ']' and len(items) > 0:
+                end = self.get()
+                if end == '\\':
+                    end = self.get()
+                if end is None:
+                    break
+                for ch in range(ord(prev)+1, ord(end)+1):
+                    items.append(chr(ch))
+                prev = items[-1]
+                continue
+            items.append(c)
+            prev = c
+        return ('class', (neg, set(items)))
