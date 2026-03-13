@@ -386,3 +386,31 @@ def ast_to_nfa(ast):
             np.accept.eps.append(a)
         return NFA(s,a)
     s = NFAState(); a = NFAState(); s.eps.append(a); return NFA(s,a)
+
+def epsilon_closure(states):
+    stack = list(states)
+    res = set(states)
+    while stack:
+        st = stack.pop()
+        for nx in st.eps:
+            if nx not in res:
+                res.add(nx)
+                stack.append(nx)
+    return res
+
+def nfa_all_symbol_keys(nfa_start):
+    visited = set()
+    stack = [nfa_start]
+    keys = set()
+    while stack:
+        st = stack.pop()
+        if st in visited:
+            continue
+        visited.add(st)
+        for k, vlist in st.trans.items():
+            keys.add(k)
+            for v2 in vlist:
+                stack.append(v2)
+        for e in st.eps:
+            stack.append(e)
+    return keys
