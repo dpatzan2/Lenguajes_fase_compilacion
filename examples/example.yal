@@ -14,5 +14,4 @@ rule gettoken =
 '-' { print(('RESTA', '-')) }
 '(' { print(('PARENI','(')) }
 ')' { print(('PAREND',')')) }
-'?' { print(('SFINT', '?')) }
 eof { raise('Fin de buffer') }
