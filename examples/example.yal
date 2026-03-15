@@ -1,12 +1,18 @@
-// Ejemplo sencillo de especificación YALEX para el proyecto.
-
+{
+import sys
+}
 let DIGIT = [0-9]
-let LETTER = [a-zA-Z]
+let IDSTART = [a-zA-Z_]
+let IDREST = [a-zA-Z0-9_]
 
-rule
-    {DIGIT}+        { return "INT"; }
-  | {LETTER}({LETTER}|{DIGIT})*  { return "ID"; }
-  | " "             { /* ignorar espacios */ }
-  | "\n"            { return "NEWLINE"; }
-  | .               { return "UNKNOWN"; }
-
+rule gettoken =
+[ \t]+ { pass }    # espacios -> ignorar
+[\n] { print(('SDL','\\n')) }
+{DIGIT}+ { print(('INT', int(lxm)) ) }
+{IDSTART}{IDREST}* { print(('ID', lxm)) }
+'+' { print(('SUMA', '+')) }
+'-' { print(('RESTA', '-')) }
+'(' { print(('PARENI','(')) }
+')' { print(('PAREND',')')) }
+'?' { print(('SFINT', '?')) }
+eof { raise('Fin de buffer') }
