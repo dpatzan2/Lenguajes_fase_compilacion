@@ -73,6 +73,14 @@ def remove_hash_comments(s):
         if c == '}' and brace_depth > 0 and not in_dquote and not in_squote:
             brace_depth -= 1
             out.append(c); i += 1; continue
+        if c == '(' and i+1 < n and s[i+1] == '*' and not in_dquote and not in_squote and not in_class and brace_depth == 0:
+            i += 2
+            while i+1 < n:
+                if s[i] == '*' and s[i+1] == ')':
+                    i += 2
+                    break
+                i += 1
+            continue
         if c == '#' and not in_dquote and not in_squote and not in_class and brace_depth == 0:
             i += 1
             while i < n and s[i] != '\n':
@@ -166,9 +174,15 @@ class RegexParser:
         if self.lets:
             s = self.s
             for k, v in self.lets.items():
-                s = re.sub(r'\{' + re.escape(k) + r'\}', '(' + v + ')', s)
+                try:
+                    s = re.sub(r'\{' + re.escape(k) + r'\}', lambda m: '(' + v + ')', s)
+                except re.error:
+                    pass
             for k, v in self.lets.items():
-                s = re.sub(r'(?<!\w)'+re.escape(k)+r'(?!\w)', '(' + v + ')', s)
+                try:
+                    s = re.sub(r'(?<!\w)'+re.escape(k)+r'(?!\w)', lambda m: '(' + v + ')', s)
+                except re.error:
+                    pass
             self.s = s
             self.n = len(self.s)
         expr = self.parse_alt()
@@ -501,6 +515,28 @@ def determinize(nfa_start, accept_states_map):
         'num_states': len(dstates)
     }
 
+def convert_return_to_print(action_code):
+    """Convierte 'return X' a 'print((\\''X\\'',))' para compatibilidad con Python."""
+    lines = []
+    for line in action_code.splitlines():
+        stripped = line.strip()
+        # Si la línea es solo "return" o "pass", déjala como está
+        if stripped == 'return' or stripped == 'pass':
+            lines.append(line)
+        # Si es "return TOKEN" o "return TOKEN ..." (pero no en strings)
+        elif stripped.startswith('return '):
+            rest = stripped[7:].strip()
+            # Convertir "return TOKEN" a print(('TOKEN',))
+            # O cosas como "return ID" -> print(('ID',))
+            if rest and not rest.startswith('"') and not rest.startswith("'"):
+                converted = line.replace('return ' + rest, f"print(('{rest}',))")
+                lines.append(converted)
+            else:
+                lines.append(line)
+        else:
+            lines.append(line)
+    return '\n'.join(lines)
+
 def generate_python_lexer(header_code, dfa, accept_actions, out_path):
     with open(out_path, 'w', encoding='utf-8') as f:
         f.write('# Auto-generated lexer (Python) - generado por yalex_gen.py\n')
@@ -524,7 +560,8 @@ def generate_python_lexer(header_code, dfa, accept_actions, out_path):
         f.write('ACTIONS = []\n\n')
         for idx, act in enumerate(accept_actions):
             f.write(f'def _act_{idx}(lxm, line, col):\n')
-            lines = act.strip().splitlines()
+            converted_act = convert_return_to_print(act)
+            lines = converted_act.strip().splitlines()
             if not lines:
                 f.write('    return None\n\n')
             else:
@@ -606,10 +643,32 @@ def main():
     header, lets, entrypoint, rules_block, trailer = split_yal(txt)
 
     if lets:
+        # Expandir lets recursivamente para resolver dependencias (ej: ws = delim+, delim = [...])
+        max_iterations = 10
+        for iteration in range(max_iterations):
+            changed = False
+            for k, v in list(lets.items()):
+                new_v = v
+                for k2, v2 in lets.items():
+                    if k2 != k:
+                        try:
+                            new_v = re.sub(r'\{' + re.escape(k2) + r'\}', lambda m: '(' + v2 + ')', new_v)
+                            new_v = re.sub(r'(?<!\w)' + re.escape(k2) + r'(?!\w)', lambda m: '(' + v2 + ')', new_v)
+                        except re.error:
+                            pass
+                if new_v != v:
+                    lets[k] = new_v
+                    changed = True
+            if not changed:
+                break
+        
+        # Ahora expandir lets en rules_block
         for k, v in lets.items():
-            rules_block = re.sub(r'\{' + re.escape(k) + r'\}', '(' + v + ')', rules_block)
-        for k, v in lets.items():
-            rules_block = re.sub(r'(?<!\w)' + re.escape(k) + r'(?!\w)', '(' + v + ')', rules_block)
+            try:
+                rules_block = re.sub(r'\{' + re.escape(k) + r'\}', lambda m: '(' + v + ')', rules_block)
+                rules_block = re.sub(r'(?<!\w)'+re.escape(k)+r'(?!\w)', lambda m: '(' + v + ')', rules_block)
+            except re.error:
+                pass
 
     rules_block = remove_hash_comments(rules_block)
 
